@@ -1,0 +1,396 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isVerifiedAdmin() {
+      return isVerifiedUser() &&
+        request.auth.token.email in ['zbcd1053@gmail.com', 'zeetosit@gmail.com'];
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'role', 'imageCount', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'imageCount', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid == userId && isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        data.role in ['member', 'admin'] &&
+        data.imageCount is int && data.imageCount >= 0 && data.imageCount <= 1000000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'lastLoginAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'lastLoginAt']) &&
+        data.uid is string && data.uid == userId && isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.lastLoginAt is timestamp;
+    }
+
+    function isImageOwner(data) {
+      return isSignedIn() && (
+        data.ownerId == request.auth.uid ||
+        ('userId' in data && data.userId == request.auth.uid)
+      );
+    }
+
+    function isValidGeneratedImage(data) {
+      return data.keys().hasAll([
+          'ownerId', 'ownerName', 'originalPrompt', 'enhancedPrompt',
+          'stylePreset', 'aspectRatio', 'model', 'imageDataUrl',
+          'isFavorite', 'visibility', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'userId', 'ownerName', 'itemType', 'sourceImageId',
+          'albumId', 'projectJson', 'originalPrompt', 'enhancedPrompt',
+          'stylePreset', 'aspectRatio', 'dimensionsLabel', 'model', 'imageDataUrl',
+          'isFavorite', 'visibility', 'createdAt', 'updatedAt'
+        ]) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        (!('userId' in data) || (data.userId is string && isValidId(data.userId) && data.userId == data.ownerId)) &&
+        data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100 &&
+        (!('itemType' in data) || data.itemType in ['generated', 'edited', 'animation']) &&
+        (!('sourceImageId' in data) || (data.sourceImageId is string && data.sourceImageId.size() <= 128)) &&
+        (!('albumId' in data) || (data.albumId is string && data.albumId.size() <= 128)) &&
+        (!('projectJson' in data) || (data.projectJson is string && data.projectJson.size() <= 250000)) &&
+        data.originalPrompt is string && data.originalPrompt.size() >= 1 && data.originalPrompt.size() <= 20000 &&
+        data.enhancedPrompt is string && data.enhancedPrompt.size() >= 1 && data.enhancedPrompt.size() <= 25000 &&
+        data.stylePreset in ['auto', 'photorealistic', 'fine-art', '3d-render', 'flat-vector', 'watercolor', 'anime', 'logo'] &&
+        data.aspectRatio in ['1:1', '16:9', '4:3', '3:4', '9:16', 'custom'] &&
+        (!('dimensionsLabel' in data) || (data.dimensionsLabel is string && data.dimensionsLabel.size() <= 32)) &&
+        data.model is string && data.model.size() >= 1 && data.model.size() <= 100 &&
+        data.imageDataUrl is string && data.imageDataUrl.size() >= 10 && data.imageDataUrl.size() <= 750000 &&
+        data.isFavorite is bool &&
+        data.visibility in ['private', 'featured', 'hidden'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAlbum(data) {
+      return data.keys().hasAll(['ownerId', 'userId', 'name', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'userId', 'name', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.userId is string && isValidId(data.userId) && data.userId == data.ownerId &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSavedPrompt(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'prompt', 'stylePreset', 'aspectRatio', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'title', 'prompt', 'negativePrompt', 'stylePreset', 'photorealismPreset', 'aspectRatio', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 20000 &&
+        (!('negativePrompt' in data) || (data.negativePrompt is string && data.negativePrompt.size() <= 4000)) &&
+        data.stylePreset in ['auto', 'photorealistic', 'fine-art', '3d-render', 'flat-vector', 'watercolor', 'anime', 'logo'] &&
+        (!('photorealismPreset' in data) || (data.photorealismPreset is string && data.photorealismPreset.size() <= 64)) &&
+        data.aspectRatio in ['1:1', '16:9', '4:3', '3:4', '9:16', 'custom'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudioProject(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'kind', 'projectJson', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['ownerId', 'title', 'kind', 'projectJson', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string && isValidId(data.ownerId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.kind in ['editor', 'decompose', 'video'] &&
+        data.projectJson is string && data.projectJson.size() >= 2 && data.projectJson.size() <= 250000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserRequest(data) {
+      return data.keys().hasAll([
+          'authorId', 'authorName', 'dateKey', 'subject', 'message',
+          'rating', 'status', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'authorId', 'authorName', 'dateKey', 'subject', 'message',
+          'rating', 'status', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.authorId is string && isValidId(data.authorId) &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+        data.dateKey is string && data.dateKey.size() == 10 && data.dateKey.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 140 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 2000 &&
+        data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+        data.status in ['submitted', 'reviewed', 'in-progress', 'completed'] &&
+        data.adminNote is string && data.adminNote.size() <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules: Users & Isolated PII
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isVerifiedAdmin());
+      allow list: if isVerifiedAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role == 'member' || isVerifiedAdmin());
+
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isVerifiedAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'role', 'imageCount', 'updatedAt'])
+          ) ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'imageCount', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isVerifiedAdmin();
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && docId == 'info' && (isOwner(userId) || isVerifiedAdmin());
+        allow list: if isValidId(userId) && (isOwner(userId) || isVerifiedAdmin());
+
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          docId == 'info' &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPrivateInfo(incoming(), userId) &&
+          incoming().email == request.auth.token.email &&
+          incoming().lastLoginAt == request.time;
+
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          docId == 'info' &&
+          isOwner(userId) &&
+          isValidUserPrivateInfo(incoming(), userId) &&
+          incoming().uid == existing().uid &&
+          incoming().email == request.auth.token.email &&
+          incoming().lastLoginAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'lastLoginAt']);
+
+        allow delete: if isValidId(userId) && docId == 'info' && isVerifiedAdmin();
+      }
+    }
+
+    // 5. Collection Rules: Generated, Edited & Animated Artworks Vault
+    match /images/{imageId} {
+      allow get: if isValidId(imageId) && (
+        existing().visibility == 'featured' ||
+        isImageOwner(existing()) ||
+        isVerifiedAdmin()
+      );
+
+      allow list: if (
+        existing().visibility == 'featured' ||
+        isImageOwner(existing()) ||
+        isVerifiedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(imageId) &&
+        isValidGeneratedImage(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        (!('userId' in incoming()) || incoming().userId == request.auth.uid) &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().visibility == 'private' || isVerifiedAdmin());
+
+      allow update: if isVerifiedUser() &&
+        isValidId(imageId) &&
+        isValidGeneratedImage(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isVerifiedAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['visibility', 'isFavorite', 'updatedAt'])
+          ) ||
+          (
+            isImageOwner(existing()) &&
+            incoming().visibility == existing().visibility &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isFavorite', 'albumId', 'projectJson', 'imageDataUrl', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(imageId) && isVerifiedUser() &&
+        (isImageOwner(existing()) || isVerifiedAdmin());
+    }
+
+    // 6. Collection Rules: Vault Albums / Folders
+    match /albums/{albumId} {
+      allow get: if isValidId(albumId) && (
+        isImageOwner(existing()) ||
+        isVerifiedAdmin()
+      );
+
+      allow list: if (
+        isImageOwner(existing()) ||
+        isVerifiedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(albumId) &&
+        isValidAlbum(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().userId == request.auth.uid &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(albumId) &&
+        isValidAlbum(incoming()) &&
+        isImageOwner(existing()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt']);
+
+      allow delete: if isValidId(albumId) && isVerifiedUser() &&
+        (isImageOwner(existing()) || isVerifiedAdmin());
+    }
+
+    // 7. Collection Rules: Daily User Requests / Letters to Staff
+    match /requests/{requestId} {
+      allow get: if isValidId(requestId) && (
+        (isSignedIn() && existing().authorId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow list: if (
+        (isSignedIn() && existing().authorId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidUserRequest(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        requestId == (request.auth.uid + '_' + incoming().dateKey) &&
+        incoming().status == 'submitted' &&
+        incoming().adminNote == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedAdmin() &&
+        isValidId(requestId) &&
+        isValidUserRequest(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().dateKey == existing().dateKey &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'updatedAt']);
+
+      allow delete: if isValidId(requestId) && isVerifiedAdmin();
+    }
+
+    // 8. Collection Rules: Saved Unlimited Prompts
+    match /savedPrompts/{promptId} {
+      allow get: if isValidId(promptId) && (
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow list: if (
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(promptId) &&
+        isValidSavedPrompt(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(promptId) &&
+        isValidSavedPrompt(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'prompt', 'negativePrompt', 'stylePreset', 'photorealismPreset', 'aspectRatio', 'updatedAt']);
+
+      allow delete: if isValidId(promptId) && isVerifiedUser() &&
+        (existing().ownerId == request.auth.uid || isVerifiedAdmin());
+    }
+
+    // 9. Collection Rules: Studio Projects (Editor, Decompose, Video)
+    match /studioProjects/{projectId} {
+      allow get: if isValidId(projectId) && (
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow list: if (
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isVerifiedAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidStudioProject(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidStudioProject(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'kind', 'projectJson', 'updatedAt']);
+
+      allow delete: if isValidId(projectId) && isVerifiedUser() &&
+        (existing().ownerId == request.auth.uid || isVerifiedAdmin());
+    }
+  }
+}

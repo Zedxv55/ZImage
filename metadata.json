@@ -1,0 +1,6 @@
+{
+  "name": "ZImage",
+  "description": "สตูดิโอสร้างภาพ AI ใช้งานฟรี พร้อมสตูดิโอแต่งภาพและทำภาพเคลื่อนไหวได้ไม่จำกัดบนเบราว์เซอร์ และคลังผลงานส่วนตัวบน Firebase",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

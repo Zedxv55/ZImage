@@ -1,0 +1,105 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg-canvas: #ffffff;
+    --bg-surface: #f7f9fc;
+    --bg-elevated: #eef3fa;
+    --text-primary: #101820;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --brand-navy: #0b1f3a;
+    --brand-blue: #2563eb;
+    --brand-blue-soft: #60a5fa;
+    --border-hairline: #e2e8f0;
+
+    --font-display: "Outfit", "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
+    --font-serif-thai: "Noto Serif Thai", "IBM Plex Sans Thai", Georgia, serif;
+    --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg-canvas: #0b1f3a;
+    --bg-surface: #101820;
+    --bg-elevated: #162947;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --brand-navy: #0b1f3a;
+    --brand-blue: #2563eb;
+    --brand-blue-soft: #60a5fa;
+    --border-hairline: #1e3a5f;
+  }
+
+  html,
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-serif-thai {
+    font-family: var(--font-serif-thai);
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.studio-hairline-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(37, 99, 235, 0.16) 20%,
+    rgba(96, 165, 250, 0.5) 50%,
+    rgba(37, 99, 235, 0.16) 80%,
+    transparent 100%
+  );
+}
+
+.checkerboard-stage {
+  background-image:
+    linear-gradient(45deg, rgba(100, 116, 139, 0.16) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(100, 116, 139, 0.16) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(100, 116, 139, 0.16) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(100, 116, 139, 0.16) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+  background-color: #f1f5f9;
+}
+
+.dark .checkerboard-stage {
+  background-image:
+    linear-gradient(45deg, rgba(30, 58, 95, 0.55) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(30, 58, 95, 0.55) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(30, 58, 95, 0.55) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(30, 58, 95, 0.55) 75%);
+  background-color: #091529;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
